@@ -7,7 +7,8 @@
 
     function kindOf(el) {
         if (el.tagName === "TEXTAREA") return "text";
-        if (el.closest(".gradio-dropdown")) return el.closest(".gradio-dropdown").querySelector(".token") ? "multi" : "dropdown";
+        const dropdown = el.closest(".gradio-dropdown");
+        if (dropdown) return dropdown.classList.contains("multiselect") ? "multi" : "dropdown";
         return ["checkbox", "radio", "range", "number"].includes(el.type) ? el.type : "text";
     }
 
@@ -16,6 +17,8 @@
         const counts = {}, out = [];
         for (const el of root.querySelectorAll("input, textarea")) {
             if (el.type === "file" || el.type === "hidden" || el.closest(".project-save-panel")) continue;
+            // A slider's number box holds the real value; the bar's limits can change with other settings.
+            if (el.type === "range" && el.closest(".block")?.querySelector("input[type=number]")) continue;
             let anchor = el.id && !UNSTABLE.test(el.id) ? el : null;
             for (let p = el.parentElement; !anchor && p && p !== root; p = p.parentElement) {
                 if (p.id && !UNSTABLE.test(p.id)) anchor = p;
@@ -28,8 +31,12 @@
         return out;
     }
 
-    const read = c => (c.kind === "checkbox" || c.kind === "radio") ? (c.el.checked ? c.el.value || "on" : "") : c.el.value;
-    const readAll = root => controls(root).filter(c => c.kind !== "multi").map(c => ({key: c.key, kind: c.kind, value: read(c)}));
+    const chosen = el => [...el.closest(".gradio-dropdown").querySelectorAll(".token")].map(t => t.textContent.trim());
+    const read = c => {
+        if (c.kind === "multi") return JSON.stringify(chosen(c.el));
+        return (c.kind === "checkbox" || c.kind === "radio") ? (c.el.checked ? c.el.value || "on" : "") : c.el.value;
+    };
+    const readAll = root => controls(root).map(c => ({key: c.key, kind: c.kind, value: read(c)}));
     const subTab = () => [...app().querySelectorAll("#mode_img2img .tab-nav button")].find(b => b.classList.contains("selected"))?.textContent.trim();
 
     function fileToUrl(blob) {
@@ -106,6 +113,14 @@
         await sleep(150);
     }
 
+    // Clear a multi-select and re-pick in the saved order, since order can matter (styles apply in order).
+    async function pickMany(el, values) {
+        await reveal(el);
+        el.closest(".gradio-dropdown").querySelector(".remove-all")?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
+        await sleep(200);
+        for (const value of values) await pick(el, value);
+    }
+
     function setValue(el, value) {
         el.value = value;
         el.dispatchEvent(new Event("input", {bubbles: true}));
@@ -119,7 +134,7 @@
         let left = [];
         for (let pass = 0; pass < 3; pass++) {
             left = [];
-            for (const kind of ["checkbox", "radio", "dropdown", "range", "number", "text"]) {
+            for (const kind of ["checkbox", "radio", "dropdown", "multi", "range", "number", "text"]) {
                 for (const c of controls(root).filter(c => c.kind === kind)) {
                     const f = wanted.get(c.key);
                     if (!f || read(c) === f.value) continue;
@@ -127,6 +142,8 @@
                         if (kind === "checkbox" || f.value) c.el.click();
                     } else if (kind === "dropdown") {
                         await pick(c.el, f.value);
+                    } else if (kind === "multi") {
+                        await pickMany(c.el, JSON.parse(f.value));
                     } else {
                         setValue(c.el, f.value);
                     }
@@ -135,7 +152,8 @@
             }
             await sleep(600);
             const now = new Map(controls(root).map(c => [c.key, c]));
-            left = fields.filter(f => f.kind !== "multi" && (!now.has(f.key) || read(now.get(f.key)) !== f.value)).map(f => f.key);
+            // Older saves recorded empty multi-selects as dropdowns, and slider bars too; neither counts if missing.
+            left = fields.filter(f => now.has(f.key) ? read(now.get(f.key)) !== f.value : f.value !== "" && f.kind !== "range").map(f => f.key);
             if (!left.length) break;
         }
         return left;

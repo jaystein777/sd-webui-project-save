@@ -1,0 +1,6 @@
+.project-save-panel { margin-top: 12px; padding: 8px 12px; border: 1px solid var(--border-color-primary); border-radius: 8px; }
+.project-save-panel summary { cursor: pointer; font-weight: 600; }
+.project-save-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.project-save-row input, .project-save-row select { flex: 1; min-width: 160px; padding: 6px 8px; color: #111; background: #fff; border: 1px solid var(--border-color-primary); border-radius: 6px; }
+.project-save-row button { padding: 6px 14px; color: var(--body-text-color); background: var(--button-secondary-background-fill); border: 1px solid var(--border-color-primary); border-radius: 6px; cursor: pointer; }
+.project-save-status { margin-top: 8px; font-size: 0.9em; word-break: break-word; }
